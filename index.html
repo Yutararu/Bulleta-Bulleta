@@ -191,26 +191,26 @@ function handleTouch(e){
 // === 画像ロード ===
 const images = {};
 const logoImage = new Image();
-logoImage.src = 'rogo.png';
+logoImage.src = 'logo.png';
 const imageSources = {
-    titleAnim: 'Title Animation.png',
-    bgAll: '街背景 昼・夕焼け・夜景.png',
-    playerWalk: 'プレイヤー横スクロール.png',
-    playerJump: 'プレイヤー横スクロール＿ジャンプ.png',
-    hitbox: '自機.png',
-    bullets: '弾幕用（4色).png',
-    platforms: '足場.png',
-    enemy1: '敵 (65111217).png',
-    enemy2: '敵 (ウシナッタ・イタリアーノ).png',
-    enemy3: '敵 (オトクガエル).png',
-    enemy4: '敵 (カモノマンナカ).png', 
-    enemy5: '敵 (クイヤ).png',
-    enemy6: '敵 (クモノメ).png', 
-    enemy7: '敵 (バキドラ).png',
-    enemy8: '敵 (ハチトムシ).png', 
-    enemy9: '敵 (リードバー).png',
-    enemy10: '敵 (ロングロングアゴー).png',
-    enemy11: '敵 (ワカッタTV).png'
+    titleAnim: 'title_animation.png',
+    bgAll: 'background.png',
+    playerWalk: 'player.png',
+    playerJump: 'player_jump.png',
+    hitbox: 'player_hitbox.png',
+    bullets: 'bullets.png',
+    platforms: 'platforms.png',
+    enemy1: 'enemy1.png',
+    enemy2: 'enemy2.png',
+    enemy3: 'enemy3.png',
+    enemy4: 'enemy4.png', 
+    enemy5: 'enemy5.png',
+    enemy6: 'enemy6.png', 
+    enemy7: 'enemy7.png',
+    enemy8: 'enemy8.png', 
+    enemy9: 'enemy9.png',
+    enemy10: 'enemy10.png',
+    enemy11: 'enemy11.png'
 };
 
 let imagesLoaded = 0;
@@ -288,7 +288,7 @@ let titleAnimFrame = 1;
 let titleAnimTimer = 0;
 let isTitleAnimFinished = false;
 
-// 起動時イントロ：暗転 → rogo.png フェードイン → 3秒表示 → フェードアウト → 暗転 → タイトルアニメーション
+// 起動時イントロ：暗転 → logo.png フェードイン → 3秒表示 → フェードアウト → 暗転 → タイトルアニメーション
 let introPhase = 'LOGO_IN';
 let introLogoAlpha = 0;
 let introLogoTimer = 0;
@@ -1734,8 +1734,8 @@ function update() {
         }
 
         // 当たり判定：敵弾 vs プレイヤー
-        // プレイヤー本体の90x120全体ではなく、「自機.png」だけを当たり判定に使う。
-        // 自機.pngの透明部分を除いた外接四角形を、実際の描画サイズへ対応させる。
+        // プレイヤー本体の90x120全体ではなく、「player_hitbox.png」だけを当たり判定に使う。
+        // player_hitbox.pngの透明部分を除いた外接四角形を、実際の描画サイズへ対応させる。
         const playerHitbox = getPlayerHitboxRect();
         enemyBullets.forEach((b, i) => {
             const overlaps =
@@ -2089,7 +2089,7 @@ function draw() {
         drawSprite(pImg, pCfg.cols, pCfg.rows, player.animFrame, player.x, player.y, player.w, player.h, flip);
         ctx.restore();
 
-        // 自機：プレイヤーより前面に表示（当たり判定もこの自機.pngのみを基準にする）
+        // 自機：プレイヤーより前面に表示（当たり判定もこのplayer_hitbox.pngのみを基準にする）
         const hitboxImg = images.hitbox;
         if (hitboxImg.complete && hitboxImg.naturalWidth > 0) {
             const hbMaxSize = 44;
@@ -2271,7 +2271,7 @@ function draw() {
 }
 
 // プレイヤーの被弾判定は「自機」部分の見えている11x11pxだけを対象にする。
-// 自機.pngの透明部分は判定に含めず、プレイヤー胴体の中心へ正確に配置する。
+// player_hitbox.pngの透明部分は判定に含めず、プレイヤー胴体の中心へ正確に配置する。
 const PLAYER_HITBOX_SOURCE_WIDTH = 11;
 const PLAYER_HITBOX_SOURCE_HEIGHT = 11;
 const PLAYER_HITBOX_SOURCE_CENTER_X = 32;
