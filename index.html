@@ -30,6 +30,7 @@
  */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const GAME_VERSION = 'β-7';
 
 ctx.imageSmoothingEnabled = false;
 
@@ -190,26 +191,26 @@ function handleTouch(e){
 // === 画像ロード ===
 const images = {};
 const logoImage = new Image();
-logoImage.src = 'logo.png';
+logoImage.src = 'rogo.png';
 const imageSources = {
-    titleAnim: 'title_animation.png',
-    bgAll: 'background.png',
-    playerWalk: 'player.png',
-    playerJump: 'player_jump.png',
-    hitbox: 'player_hitbox.png',
-    bullets: 'bullets.png',
-    platforms: 'platforms.png',
-    enemy1: 'enemy1.png',
-    enemy2: 'enemy2.png',
-    enemy3: 'enemy3.png',
-    enemy4: 'enemy4.png', 
-    enemy5: 'enemy5.png',
-    enemy6: 'enemy6.png', 
-    enemy7: 'enemy7.png',
-    enemy8: 'enemy8.png', 
-    enemy9: 'enemy9.png',
-    enemy10: 'enemy10.png',
-    enemy11: 'enemy11.png'
+    titleAnim: 'Title Animation.png',
+    bgAll: '街背景 昼・夕焼け・夜景.png',
+    playerWalk: 'プレイヤー横スクロール.png',
+    playerJump: 'プレイヤー横スクロール＿ジャンプ.png',
+    hitbox: '自機.png',
+    bullets: '弾幕用（4色).png',
+    platforms: '足場.png',
+    enemy1: '敵 (65111217).png',
+    enemy2: '敵 (ウシナッタ・イタリアーノ).png',
+    enemy3: '敵 (オトクガエル).png',
+    enemy4: '敵 (カモノマンナカ).png', 
+    enemy5: '敵 (クイヤ).png',
+    enemy6: '敵 (クモノメ).png', 
+    enemy7: '敵 (バキドラ).png',
+    enemy8: '敵 (ハチトムシ).png', 
+    enemy9: '敵 (リードバー).png',
+    enemy10: '敵 (ロングロングアゴー).png',
+    enemy11: '敵 (ワカッタTV).png'
 };
 
 let imagesLoaded = 0;
@@ -298,7 +299,7 @@ const INTRO_BLACK_GAP_FRAMES = 30; // ロゴ消失後の暗転
 // プレイヤー（90x120）
 const player = {
     x: 100, y: 300, w: 90, h: 120,
-    vx: 0, vy: 0, speed: 3.6, jumpPower: 13.68,
+    vx: 0, vy: 0, speed: 3.8, jumpPower: 13.68,
     dir: 1, 
     isJumping: false,
     animFrame: 1,
@@ -332,6 +333,37 @@ let transitionPhase = 'none';
 let transitionAlpha = 0;
 let transitionTargetState = null;
 const TRANSITION_SPEED = 0.14;
+
+// 重力状態：雑魚戦は重力、中ボス・ボス戦は無重力。波が切り替わるたびに演出を出す。
+let zeroGravityActive = false;
+let gravityTransitionTimer = 0;
+let gravityTransitionDirection = 0;
+const GRAVITY_TRANSITION_FRAMES = 60;
+let stageTransitionTimer = 0;
+let stageTransitionStage = 1;
+const STAGE_TRANSITION_FRAMES = 90;
+
+function getZeroGravityCombatState() {
+    return (stage >= 1 && stage <= 3) && /^(STAGE[123]_(MIDBOSS|BOSS))$/.test(waveState) && !tutorialActive;
+}
+
+function updateGravityState() {
+    const nextGravityState = getZeroGravityCombatState();
+    if (nextGravityState !== zeroGravityActive) {
+        zeroGravityActive = nextGravityState;
+        gravityTransitionTimer = GRAVITY_TRANSITION_FRAMES;
+        gravityTransitionDirection = zeroGravityActive ? 1 : -1;
+        if (zeroGravityActive) {
+            player.vy = 0;
+            player.isJumping = false;
+        } else {
+            player.vy = 0;
+            player.isJumping = false;
+        }
+    }
+    if (gravityTransitionTimer > 0) gravityTransitionTimer--;
+    if (stageTransitionTimer > 0) stageTransitionTimer--;
+}
 
 // 画面内UIのフェードイン。
 let uiFadeProgress = 1;
@@ -629,8 +661,8 @@ function spawnEnemyBullets(enemy) {
     const ZAKO_ATTACK_COOLDOWN = 90; // 約1.5秒。リードバーだけは例外。
     if (enemy.role === 'zako' && !isLeaderBar && enemy.attackCooldown > 0) return;
 
-    if (enemy.role === 'midboss') profile.speed *= 1.35 * (enemy.midbossStage === 3 ? 1.05 : (enemy.midbossStage === 2 ? 1.02 : 1.0));
-    if (enemy.role === 'boss') profile.speed *= 1.55 * (enemy.bossStage === 3 ? 1.16 : (enemy.bossStage === 2 ? 1.08 : 1.0));
+    if (enemy.role === 'midboss') profile.speed *= 1.35 * (enemy.midbossStage === 3 ? 1.05 : (enemy.midbossStage === 2 ? 1.02 : 1.0)) * ((enemy.midbossStage === 2 || enemy.midbossStage === 3) ? 1.2 : 1.0);
+    if (enemy.role === 'boss') profile.speed *= 1.55 * (enemy.bossStage === 3 ? 1.16 : (enemy.bossStage === 2 ? 1.08 : 1.0)) * ((enemy.bossStage === 2 || enemy.bossStage === 3) ? 1.2 : 1.0);
     const stg = stage;
     const ex = enemy.x + enemy.w / 2;
     const ey = enemy.y + enemy.h / 2;
@@ -844,10 +876,6 @@ function spawnEnemyBullets(enemy) {
             // 外向リング5 + 内向き扇2 + 落下弾2
             for (let i = 0; i < 5; i++) addBullet((Math.PI * 2 / 5) * i - frameCount * 0.03, 2.2, fRing);
             for (let i = 0; i < 2; i++) addBullet(targetAngle - 0.16 + i * 0.32, 3.6, fLine);
-            for (let i = 0; i < 2; i++) {
-                const spawnX = Math.max(35, Math.min(canvas.width - 35, px + (i === 0 ? -60 : 60)));
-                addVerticalBullet(spawnX, -20, 0, 4.5 * midbossSpeedScale, fParticle);
-            }
         } else {
             // 全方位7 + 追尾2（締め）
             for (let i = 0; i < 7; i++) addBullet((Math.PI * 2 / 7) * i + frameCount * 0.05, 2.9, (i % 2 === 0 ? fRing : fParticle));
@@ -958,7 +986,7 @@ function updateEnemyAnimation(e) {
     // 登場移動
     if (e.x > e.targetX) {
         e.x -= e.isBoss ? 1.5 : 3;
-    } else if ([1,7,8,9].includes(e.id)) {
+    } else if ([1,8,9].includes(e.id)) {
         e.y = e.baseY + Math.sin(frameCount * 0.05) * 12;
     } else {
         e.y = e.baseY;
@@ -1068,31 +1096,35 @@ function updateEnemyAnimation(e) {
             break;
 
         case 4:
-            if (e.role === 'midboss') {
-                // 中ボスは攻撃開始待ちを廃止し、12フレームごとに高密度弾幕を連射。
-                if (e.animTimer % 8 === 0) e.frame = (e.frame % 5) + 1;
-                if (e.x <= e.targetX && e.animTimer % 12 === 0) {
-                    e.animState = 'ATTACK';
-                    e.frame = 9;
-                    spawnEnemyBullets(e);
-                }
-                if (e.animState === 'ATTACK' && e.animTimer % 48 === 0) {
-                    e.animState = 'MOVE';
-                    e.frame = 1;
-                }
-            } else if (e.animState === 'MOVE') {
+            // カモノマンナカ：弓を引く → 矢を放つ瞬間（9コマ目）に弾幕を発射。
+            if (e.animState === 'MOVE') {
                 if (e.animTimer % 8 === 0) {
                     e.frame = (e.frame % 5) + 1;
-                    if (Math.random() < (e.role === 'boss' ? 0.18 : 0.07) && e.x <= e.targetX) {
+                    const attackInterval = e.role === 'midboss' ? 12 : (e.role === 'boss' ? 20 : 24);
+                    if (e.x <= e.targetX && e.animTimer % attackInterval === 0) {
                         e.animState = 'ATTACK';
-                        e.frame = 9;
-                        spawnEnemyBullets(e);
+                        e.frame = 6;
+                        e.attackDone = false;
+                        e.attackHoldTimer = 0;
+                        e.animTimer = 0;
                     }
                 }
             } else if (e.animState === 'ATTACK') {
-                if (e.animTimer > (e.role === 'boss' ? 28 : 16)) {
-                    e.frame = 1;
-                    e.animState = 'MOVE';
+                if (e.frame < 9 && e.animTimer % 6 === 0) {
+                    e.frame++;
+                }
+                if (e.frame === 9 && !e.attackDone) {
+                    spawnEnemyBullets(e);
+                    e.attackDone = true;
+                    e.attackHoldTimer = 0;
+                }
+                if (e.frame === 9 && e.attackDone) {
+                    e.attackHoldTimer++;
+                    if (e.attackHoldTimer >= (e.role === 'midboss' ? 18 : (e.role === 'boss' ? 24 : 12))) {
+                        e.animState = 'MOVE';
+                        e.frame = 1;
+                        e.animTimer = 0;
+                    }
                 }
             }
             break;
@@ -1289,7 +1321,8 @@ function update() {
         frameCount++;
         
         const touchMoveX=input.touch.moveX||0;
-        const zeroGravityCombat = (stage >= 1 && stage <= 3) && /^(STAGE[123]_(MIDBOSS|BOSS))$/.test(waveState) && !tutorialActive;
+        updateGravityState();
+        const zeroGravityCombat = zeroGravityActive;
         let moveLeft = input.keys['a'] || input.keys['A'] || input.keys['ArrowLeft'] || input.touch.left || touchMoveX < -0.20;
         let moveRight = input.keys['d'] || input.keys['D'] || input.keys['ArrowRight'] || input.touch.right || touchMoveX > 0.20;
         let moveUp = input.keys['w'] || input.keys['W'] || input.keys['ArrowUp'];
@@ -1731,7 +1764,7 @@ function drawDebugOverlay() {
     const visiblePlatforms = getVisiblePlatformCount();
     const zeroGravityCombat = (stage >= 1 && stage <= 3) && /^(STAGE[123]_(MIDBOSS|BOSS))$/.test(waveState) && !tutorialActive;
     const rows = [
-        'DEBUG MODE  [F3で切替]',
+        `DEBUG MODE  [F3で切替]  /  Version: ${GAME_VERSION}`,
         `Stage: ${stage}  /  Wave: ${waveState}`,
         `足場: ${visiblePlatforms} / ${TARGET_VISIBLE_PLATFORMS}  (総数 ${platforms.length})`,
         `Player: x=${player.x.toFixed(1)}  y=${player.y.toFixed(1)}`,
@@ -1775,6 +1808,50 @@ function drawDebugOverlay() {
         ctx.strokeRect(ex, ey, e.w, e.h);
     });
 
+    ctx.restore();
+}
+
+function drawGravityTransitionEffect() {
+    if (gravityTransitionTimer <= 0) return;
+    const progress = 1 - gravityTransitionTimer / GRAVITY_TRANSITION_FRAMES;
+    const alpha = Math.sin(Math.PI * progress);
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const radius = 70 + progress * 150;
+    const label = gravityTransitionDirection > 0 ? '無重力' : '重力';
+    const detail = gravityTransitionDirection > 0 ? 'GRAVITY OFF' : 'GRAVITY ON';
+
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.strokeStyle = gravityTransitionDirection > 0 ? '#66ccff' : '#dc8c39';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = gravityTransitionDirection > 0 ? '#66ccff' : '#dc8c39';
+    ctx.font = `${Math.min(44, canvas.width * 0.07)}px GameFont, sans-serif`;
+    ctx.fillText(label, cx, cy - 8);
+    ctx.fillStyle = '#fff';
+    ctx.font = `${Math.min(18, canvas.width * 0.03)}px GameFont, sans-serif`;
+    ctx.fillText(detail, cx, cy + 24);
+    ctx.restore();
+}
+
+function drawStageTransitionEffect() {
+    if (stageTransitionTimer <= 0) return;
+    const progress = 1 - stageTransitionTimer / STAGE_TRANSITION_FRAMES;
+    const alpha = Math.sin(Math.PI * progress);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#dc8c39';
+    ctx.font = `${Math.min(72, canvas.width * 0.11)}px GameFont, sans-serif`;
+    ctx.fillText(`STAGE ${stageTransitionStage}`, canvas.width / 2, canvas.height * 0.43);
+    ctx.fillStyle = '#fff';
+    ctx.font = `${Math.min(22, canvas.width * 0.035)}px GameFont, sans-serif`;
+    ctx.fillText('NEXT AREA', canvas.width / 2, canvas.height * 0.50);
     ctx.restore();
 }
 
@@ -2144,6 +2221,15 @@ function draw() {
             ctx.fillText('チュートリアル中は被弾しません　／　スキップ不可',canvas.width/2,panelY+184);
         }
 
+        ctx.save();
+        ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.font = '14px GameFont, sans-serif';
+        ctx.fillText(GAME_VERSION, canvas.width - 14, 24);
+        ctx.restore();
+
+        drawGravityTransitionEffect();
+        drawStageTransitionEffect();
         drawDebugOverlay();
 
     } else if (gameState === 'GAMEOVER') {
@@ -2184,31 +2270,41 @@ function draw() {
     }
 }
 
-// プレイヤーの被弾判定は「自機」部分だけを対象にした固定矩形。
-// 画像のピクセル解析（getImageData）は、ローカルHTML環境では
-// canvasのセキュリティ制限でフリーズ原因になるため使用しない。
-const PLAYER_HITBOX_WIDTH = 22;
-const PLAYER_HITBOX_HEIGHT = 30;
+// プレイヤーの被弾判定は「自機」部分の見えている11x11pxだけを対象にする。
+// 自機.pngの透明部分は判定に含めず、プレイヤー胴体の中心へ正確に配置する。
+const PLAYER_HITBOX_SOURCE_WIDTH = 11;
+const PLAYER_HITBOX_SOURCE_HEIGHT = 11;
+const PLAYER_HITBOX_SOURCE_CENTER_X = 32;
+const PLAYER_HITBOX_SOURCE_CENTER_Y = 31.5;
+const PLAYER_HITBOX_MARKER_SIZE = 44;
 const PLAYER_HITBOX_CENTER_X = 0.50;
 const PLAYER_HITBOX_CENTER_Y = 0.60;
 
 function getPlayerHitboxRect() {
     const centerX = player.x + player.w * PLAYER_HITBOX_CENTER_X;
     const centerY = player.y + player.h * PLAYER_HITBOX_CENTER_Y;
+    const hbScale = PLAYER_HITBOX_MARKER_SIZE / 64;
+    const hitboxW = PLAYER_HITBOX_SOURCE_WIDTH * hbScale;
+    const hitboxH = PLAYER_HITBOX_SOURCE_HEIGHT * hbScale;
     return {
-        x: centerX - PLAYER_HITBOX_WIDTH / 2,
-        y: centerY - PLAYER_HITBOX_HEIGHT / 2,
-        w: PLAYER_HITBOX_WIDTH,
-        h: PLAYER_HITBOX_HEIGHT
+        x: centerX - hitboxW / 2,
+        y: centerY - hitboxH / 2,
+        w: hitboxW,
+        h: hitboxH
     };
 }
 
+const PLATFORM_VISIBLE_SOURCE_X = 9;
+const PLATFORM_VISIBLE_SOURCE_Y = 24;
+const PLATFORM_VISIBLE_SOURCE_W = 40;
+const PLATFORM_VISIBLE_SOURCE_H = 15;
+
 function platformActiveRect(p) {
     return {
-        x: p.x + (PLATFORM_CELL_SIZE - PLATFORM_ACTIVE_W) / 2,
-        y: p.y + PLATFORM_ACTIVE_OFFSET_Y,
-        w: PLATFORM_ACTIVE_W,
-        h: PLATFORM_ACTIVE_H
+        x: p.x + PLATFORM_VISIBLE_SOURCE_X * PLATFORM_SCALE,
+        y: p.y + PLATFORM_VISIBLE_SOURCE_Y * PLATFORM_SCALE,
+        w: PLATFORM_VISIBLE_SOURCE_W * PLATFORM_SCALE,
+        h: PLATFORM_VISIBLE_SOURCE_H * PLATFORM_SCALE
     };
 }
 
@@ -2308,6 +2404,10 @@ function setupPlatforms() {
 
 function resetRun() {
     hitCount = 0; playerInvincibleUntil = 0; frameCount = 0; gameStartTime = performance.now(); clearTimeMs = 0;
+    zeroGravityActive = false;
+    gravityTransitionTimer = 0;
+    gravityTransitionDirection = 0;
+    stageTransitionTimer = 0;
     jumpHeldPrev = false;
     player.x = 70; player.y = canvas.height * (56 / 64) - player.h;
     player.vx = 0; player.vy = 0; player.isJumping = false; player.shootTimer = 0;
@@ -2331,7 +2431,7 @@ function beginStageWithoutTutorial() {
     startStage(1);
 }
 function startGame(){setGameState('TUTORIAL_CHOICE');choiceSelection=0;}
-function proceedToNextStage(){if(stage<3){startStage(stage+1);setGameState('PLAYING');}else{gameResult='CLEAR';clearTimeMs=performance.now()-gameStartTime;setGameState('GAMEOVER');}}
+function proceedToNextStage(){if(stage<3){const nextStage=stage+1;stageTransitionStage=nextStage;stageTransitionTimer=STAGE_TRANSITION_FRAMES;startStage(nextStage);setGameState('PLAYING');}else{gameResult='CLEAR';clearTimeMs=performance.now()-gameStartTime;setGameState('GAMEOVER');}}
 
 // 60fps固定ステップ
 // MacBook Proで従来のフレーム基準のゲーム速度を基準値として、
