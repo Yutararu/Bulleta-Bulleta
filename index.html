@@ -131,10 +131,8 @@ canvas.addEventListener('click', e => {
     const r = canvas.getBoundingClientRect();
     const x = e.clientX-r.left, y=e.clientY-r.top;
     
-if (gameState === 'INIT') {
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
+    if (gameState === 'INIT') {
+        // 最初のクリックでBGM(タイトル曲)を起動し、タイトル画面へ移行
         playBGM('title');
         setGameState('TITLE');
         return;
@@ -173,10 +171,7 @@ function handleTouch(e){
    for(let i=0;i<e.touches.length;i++){
         const t=e.touches[i],x=t.clientX-rect.left,y=t.clientY-rect.top;
 
-if (gameState === 'INIT') {
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
+        if (gameState === 'INIT') {
             playBGM('title');
             setGameState('TITLE');
             continue;
@@ -232,24 +227,31 @@ if (gameState === 'INIT') {
     }
 }
 
-// === 音声（BGM & SE）ロードと管理 ===
+// === 音声（BGM）ロードと管理 ===
 const bgmTracks = {
     title: new Audio('Time_Travel.mp3'),
     stage1_2: new Audio('Deckrail.mp3'),
     stage3: new Audio('Existential_Depth.mp3')
 };
 
+const hitSE = new Audio('Hit.mp3');
+hitSE.volume = 0.6; // 効果音の音量調整（0.0 ～ 1.0）
 
-// 音量とループの一括設定
+// 被弾音を鳴らす関数
+function playHitSE() {
+    hitSE.currentTime = 0; // 連続ヒットに対応するため再生位置を最初に戻す
+    hitSE.play().catch(e => console.log('SE Play Blocked:', e));
+}
+
+
+// ループ設定
 Object.values(bgmTracks).forEach(audio => {
     audio.loop = true;
-    audio.volume = 0.25; // BGMの音量（控えめ設定）
+    audio.volume = 0.5; // 音量はここで調整（0.0 〜 1.0）
 });
-hitSE.volume = 0.95;    // SEの音量（大きめ設定）
 
 let currentBGMKey = null;
 
-// BGM再生関数
 function playBGM(key) {
     if (currentBGMKey === key) return; // すでに同じ曲が流れていればスキップ
     
@@ -263,38 +265,6 @@ function playBGM(key) {
     if (bgmTracks[key]) {
         bgmTracks[key].play().catch(e => console.log('BGM Play Blocked:', e));
     }
-}
-
-// Web Audio API の初期化
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-let hitBuffer = null;
-
-// Hit.mp3 をメモリに前もってロード（遅延ゼロ化）
-fetch('Hit.mp3')
-    .then(response => response.arrayBuffer())
-    .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
-    .then(decodedData => { hitBuffer = decodedData; })
-    .catch(e => console.log('SE Load Error:', e));
-
-// 超高速・遅延ゼロのSE再生関数
-function playHitSE() {
-    if (!hitBuffer) return;
-    
-    // サスペンド状態（ブラウザの自動再生規制）を解除
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
-
-    const source = audioCtx.createBufferSource();
-    const gainNode = audioCtx.createGain();
-
-    source.buffer = hitBuffer;
-    gainNode.gain.value = 1.0; // SEの音量（0.0 〜 1.0以上も可）
-
-    source.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    
-    source.start(0); // 呼び出した瞬間に即時再生
 }
 
 // === 画像ロード ===
