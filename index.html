@@ -49,7 +49,8 @@ const SPRITE_CONFIG = {
     playerJump:  { cols: 4, rows: 5, totalFrames: 17 },
     platforms:   { cols: 2, rows: 2, totalFrames: 3 },
     bullets:     { cols: 4, rows: 5, totalFrames: 20 },
-    bgAll:       { cols: 1, rows: 3, totalFrames: 3 }
+    bgAll:       { cols: 1, rows: 3, totalFrames: 3 },
+    hpBar:       { cols: 5, rows: 6, totalFrames: 27 }
 };
 
 // 敵の設定 (アニメーション最大フレーム数等)
@@ -207,6 +208,7 @@ const imageSources = {
     hitbox: 'player_hitbox.png',
     bullets: 'bullets.png',
     platforms: 'platforms.png',
+    hpBar: 'HP_Bar.png',
     enemy1: 'enemy1.png',
     enemy2: 'enemy2.png',
     enemy3: 'enemy3.png',
@@ -294,6 +296,8 @@ let gameResult = 'CLEAR';
 let titleAnimFrame = 1;
 let titleAnimTimer = 0;
 let isTitleAnimFinished = false;
+let screenShakeTimer = 0;
+let screenShakeMagnitude = 0;
 
 // 起動時イントロ：暗転 → logo.png フェードイン → 3秒表示 → フェードアウト → 暗転 → タイトルアニメーション
 let introPhase = 'LOGO_IN';
@@ -1793,6 +1797,8 @@ if (zeroGravityCombat) {
             if (!debugMode && overlaps && performance.now() >= playerInvincibleUntil) {
                 hitCount++;
                 playerInvincibleUntil = performance.now() + 1000;
+                screenShakeTimer = 12;
+                screenShakeMagnitude = 10;
                 enemyBullets.splice(i, 1);
                 if (hitCount >= MAX_PLAYER_HP) setGameState('GAMEOVER');
             }
@@ -1927,6 +1933,14 @@ function draw() {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.imageSmoothingEnabled = false;
+
+    ctx.save();
+    if (screenShakeTimer > 0) {
+        const offsetX = (Math.random() - 0.5) * 2 * screenShakeMagnitude;
+        const offsetY = (Math.random() - 0.5) * 2 * screenShakeMagnitude;
+        ctx.translate(offsetX, offsetY);
+        screenShakeTimer--;
+    }
 
     if (imagesLoaded < totalImages) {
         ctx.fillStyle = '#fff';
@@ -2191,33 +2205,80 @@ function draw() {
 
         // UI表示
         ctx.fillStyle = '#fff';
-        ctx.font = '22px GameFont, sans-serif';
+        ctx.font = '28px GameFont, sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`被弾数: ${hitCount} / ${MAX_PLAYER_HP}`, 20, 35);
-        
-        let phaseText = `Stage: ${stage}`;
-        if (tutorialActive) phaseText = 'チュートリアル：基本操作を順番に練習しよう（攻撃は自動）';
-        else {
-            const labels = {
-                'STAGE1_ZAKO1': 'Stage 1　雑魚戦1',
-                'STAGE1_ZAKO2': 'Stage 1　雑魚戦2',
-                'STAGE1_MIDBOSS': 'Stage 1　中ボス　【HIGH】',
-                'STAGE1_ZAKO3': 'Stage 1　雑魚戦3',
-                'STAGE1_BOSS': 'Stage 1　ボス　【VERY HIGH】',
-                'STAGE2_ZAKO1': 'Stage 2　雑魚戦1',
-                'STAGE2_ZAKO2': 'Stage 2　雑魚戦2',
-                'STAGE2_MIDBOSS': 'Stage 2　中ボス　【HIGH】',
-                'STAGE2_ZAKO3': 'Stage 2　雑魚戦3',
-                'STAGE2_BOSS': 'Stage 2　ボス　【VERY HIGH】',
-                'STAGE3_ZAKO1': 'Stage 3　雑魚戦1',
-                'STAGE3_ZAKO2': 'Stage 3　雑魚戦2',
-                'STAGE3_MIDBOSS': 'Stage 3　中ボス　【HIGH】',
-                'STAGE3_ZAKO3': 'Stage 3　雑魚戦3',
-                'STAGE3_BOSS': 'Stage 3　ボス　【VERY HIGH】'
-            };
-            phaseText = labels[waveState] || `Stage ${stage}`;
+
+        // 1. HPバー描画（上下の透明余白を完全カットして最上部・文字に密着）
+        const currentHp = Math.max(0, MAX_PLAYER_HP - hitCount);
+        let hpFrameIndex = 1; 
+        if (currentHp === 0) {
+            hpFrameIndex = 27; // 空枠
+        } else {
+            hpFrameIndex = (MAX_PLAYER_HP - currentHp) + 2; // 残量に応じたコマ
         }
-        ctx.fillText(phaseText, 20, 70);
+
+        const hpBarImg = images.hpBar;
+        let barHeight = 0;
+        const barX = 15; // 左端固定
+        const barY = 0;  // 上端密着
+
+        if (hpBarImg && hpBarImg.complete && hpBarImg.naturalWidth > 0) {
+            const hpCfg = SPRITE_CONFIG.hpBar;
+            
+            // 1コマあたりの基本サイズ
+            const rawSw = hpBarImg.naturalWidth / hpCfg.cols;
+            const rawSh = hpBarImg.naturalHeight / hpCfg.rows;
+            const idx = Math.max(0, hpFrameIndex - 1);
+            
+            // 上下の透明な余白を完全に削り取るトリミング設定
+            // 上部約22%をカット、全体の高さを約48%だけに絞り込んで下の空白も除去
+            const cropTopRatio = 0.22;
+            const cropHeightRatio = 0.48; 
+
+            const sx = (idx % hpCfg.cols) * rawSw;
+            const sy = Math.floor(idx / hpCfg.cols) * rawSh + (rawSh * cropTopRatio);
+            const sw = rawSw;
+            const sh = rawSh * cropHeightRatio;
+
+            // 3.8倍で拡大描画
+            const scale = 3.8;
+            const dw = sw * scale;
+            const dh = sh * scale;
+            barHeight = dh;
+
+            ctx.save();
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(hpBarImg, sx, sy, sw, sh, barX, barY, dw, dh);
+            ctx.restore();
+        }
+
+        // 2. ステージ名の取得
+        const labels = {
+            'STAGE1_ZAKO1': 'Stage 1 雑魚戦1',
+            'STAGE1_ZAKO2': 'Stage 1 雑魚戦2',
+            'STAGE1_MIDBOSS': 'Stage 1 中ボス 【HIGH】',
+            'STAGE1_ZAKO3': 'Stage 1 雑魚戦3',
+            'STAGE1_BOSS': 'Stage 1 ボス 【VERY HIGH】',
+            'STAGE2_ZAKO1': 'Stage 2 雑魚戦1',
+            'STAGE2_ZAKO2': 'Stage 2 雑魚戦2',
+            'STAGE2_MIDBOSS': 'Stage 2 中ボス 【HIGH】',
+            'STAGE2_ZAKO3': 'Stage 2 雑魚戦3',
+            'STAGE2_BOSS': 'Stage 2 ボス〠【VERY HIGH】',
+            'STAGE3_ZAKO1': 'Stage 3 雑魚戦1',
+            'STAGE3_ZAKO2': 'Stage 3 雑魚戦2',
+            'STAGE3_MIDBOSS': 'Stage 3 中ボス 【HIGH】',
+            'STAGE3_ZAKO3': 'Stage 3 雑魚戦3',
+            'STAGE3_BOSS': 'Stage 3 ボス 【VERY HIGH】'
+        };
+
+        const phaseText = tutorialActive
+            ? 'チュートリアル：基本操作を順番に練習しよう（攻撃は自動）'
+            : (labels[waveState] || `Stage ${stage}`);
+
+        // 3. テキストを描画（HPバーの下枠に隙間なくピッタリ密着）
+        // 28pxフォントの描画ベースラインに合わせて、実描画領域のすぐ下に配置
+        const textY = barHeight > 0 ? (barY + barHeight + 22) : 35;
+        ctx.fillText(phaseText, 15, textY);
         // iPad / スマホ：左スティックで移動、右ボタンでジャンプ
         const joyX=Math.min(110,canvas.width*0.16), joyY=canvas.height-92;
         const joyR=Math.min(70,Math.max(48,canvas.width*0.075));
@@ -2291,9 +2352,29 @@ function draw() {
         ctx.fillText(GAME_VERSION, canvas.width - 14, 24);
         ctx.restore();
 
-        drawGravityTransitionEffect();
+drawGravityTransitionEffect();
         drawStageTransitionEffect();
         drawDebugOverlay();
+
+       const remainingHp = MAX_PLAYER_HP - hitCount;
+        if (remainingHp <= 5 && remainingHp > 0) {
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            const outerRadius = Math.max(canvas.width, canvas.height) * 0.7;
+
+            // 心拍のようなドクドクした点滅
+            const pulse = 0.35 + Math.sin(frameCount * 0.1) * 0.15;
+
+            // 中心（透明）から画面端（赤）へのグラデーション
+            const grad = ctx.createRadialGradient(cx, cy, outerRadius * 0.3, cx, cy, outerRadius);
+            grad.addColorStop(0, 'rgba(255, 0, 0, 0)');
+            grad.addColorStop(1, `rgba(255, 0, 0, ${pulse})`);
+
+            ctx.save();
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+        }
 
     } else if (gameState === 'GAMEOVER') {
         ctx.fillStyle = 'rgba(0,0,0,0.85)';
@@ -2323,6 +2404,9 @@ function draw() {
         ctx.restore();
     }
 
+    // ★ ここに1行追加（画面揺れ用translateの解除）
+    ctx.restore();
+
     // 画面遷移用の暗転。完全な黒を一度挟んでから次の画面へ。
     if (transitionActive && transitionAlpha > 0) {
         ctx.save();
@@ -2332,7 +2416,6 @@ function draw() {
         ctx.restore();
     }
 }
-
 // プレイヤーの被弾判定は「自機」部分の見えている11x11pxだけを対象にする。
 // player_hitbox.pngの透明部分は判定に含めず、プレイヤー胴体の中心へ正確に配置する。
 const PLAYER_HITBOX_SOURCE_WIDTH = 11;
