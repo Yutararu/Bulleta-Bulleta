@@ -234,16 +234,6 @@ const bgmTracks = {
     stage3: new Audio('Existential_Depth.mp3')
 };
 
-const hitSE = new Audio('Hit.mp3');
-hitSE.volume = 0.6; // 効果音の音量調整（0.0 ～ 1.0）
-
-// 被弾音を鳴らす関数
-function playHitSE() {
-    hitSE.currentTime = 0; // 連続ヒットに対応するため再生位置を最初に戻す
-    hitSE.play().catch(e => console.log('SE Play Blocked:', e));
-}
-
-
 // ループ設定
 Object.values(bgmTracks).forEach(audio => {
     audio.loop = true;
@@ -1892,10 +1882,9 @@ if (zeroGravityCombat) {
                 b.x < playerHitbox.x + playerHitbox.w &&
                 b.y > playerHitbox.y &&
                 b.y < playerHitbox.y + playerHitbox.h;
-           if (!debugMode && overlaps && performance.now() >= playerInvincibleUntil) {
+            if (!debugMode && overlaps && performance.now() >= playerInvincibleUntil) {
                 hitCount++;
                 totalHitCount++;
-                playHitSE(); // ★ 被弾音(Hit.mp3)を鳴らす
                 playerInvincibleUntil = performance.now() + 1000;
                 screenShakeTimer = 12;
                 screenShakeMagnitude = 10;
