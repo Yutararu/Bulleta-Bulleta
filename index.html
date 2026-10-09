@@ -143,7 +143,7 @@ canvas.addEventListener('touchend',handleTouch,{passive:false});
 canvas.addEventListener('touchcancel',handleTouch,{passive:false});
 function handleTouch(e){
     e.preventDefault();
-    input.touch={left:false,right:false,jump:false,moveX:0,joystickActive:false};
+    input.touch={left:false,right:false,up:false,down:false,jump:false,moveX:0,moveY:0,joystickActive:false};
     const rect=canvas.getBoundingClientRect();
     const joyX=Math.min(110,canvas.width*0.16),joyY=canvas.height-92;
     const joyR=Math.min(70,Math.max(48,canvas.width*0.075));
@@ -175,19 +175,26 @@ function handleTouch(e){
             continue;
         }
         if(gameState!=='PLAYING') continue;
+        
         const dx=x-joyX,dy=y-joyY,dist=Math.hypot(dx,dy);
         if(x<canvas.width*0.48&&y>canvas.height*0.56&&dist<=joyR*1.65){
-            const c=Math.min(dist,joyR),nx=dist?dx/dist:0;
+            const c=Math.min(dist,joyR);
+            const nx=dist?dx/dist:0;
+            const ny=dist?dy/dist:0;
             input.touch.moveX=Math.max(-1,Math.min(1,nx*c/joyR));
+            input.touch.moveY=Math.max(-1,Math.min(1,ny*c/joyR)); // Y軸入力を追加
             input.touch.joystickActive=true;
+
+            // 8方向判定
             input.touch.left=input.touch.moveX<-0.20;
             input.touch.right=input.touch.moveX>0.20;
+            input.touch.up=input.touch.moveY<-0.20;     // 上入力を追加
+            input.touch.down=input.touch.moveY>0.20;   // 下入力を追加
         }else if(x>canvas.width*0.52&&y>canvas.height*0.56&&Math.hypot(x-jumpX,y-jumpY)<=jumpR*1.45){
             input.touch.jump=true;
         }
     }
 }
-
 // === 画像ロード ===
 const images = {};
 const logoImage = new Image();
@@ -661,8 +668,8 @@ function spawnEnemyBullets(enemy) {
     const ZAKO_ATTACK_COOLDOWN = 90; // 約1.5秒。リードバーだけは例外。
     if (enemy.role === 'zako' && !isLeaderBar && enemy.attackCooldown > 0) return;
 
-    if (enemy.role === 'midboss') profile.speed *= 1.35 * (enemy.midbossStage === 3 ? 1.05 : (enemy.midbossStage === 2 ? 1.02 : 1.0)) * ((enemy.midbossStage === 2 || enemy.midbossStage === 3) ? 1.2 : 1.0);
-    if (enemy.role === 'boss') profile.speed *= 1.55 * (enemy.bossStage === 3 ? 1.16 : (enemy.bossStage === 2 ? 1.08 : 1.0)) * ((enemy.bossStage === 2 || enemy.bossStage === 3) ? 1.2 : 1.0);
+    if (enemy.role === 'midboss') profile.speed *= 1.35 * (enemy.midbossStage === 3 ? 1.05 : (enemy.midbossStage === 2 ? 1.02 : 1.0)) * ((enemy.midbossStage === 2 || enemy.midbossStage === 3) ? 1.2 : 1.0) * 1.25;
+    if (enemy.role === 'boss') profile.speed *= 1.55 * (enemy.bossStage === 3 ? 1.16 : (enemy.bossStage === 2 ? 1.08 : 1.0)) * ((enemy.bossStage === 2 || enemy.bossStage === 3) ? 1.2 : 1.0) * 1.30;
     const stg = stage;
     const ex = enemy.x + enemy.w / 2;
     const ey = enemy.y + enemy.h / 2;
@@ -818,13 +825,13 @@ function spawnEnemyBullets(enemy) {
         const fLine = 16;   // row 4 / 4th pattern
         const phaseCount = enemy.midbossStage === 3 ? 6 : 6;
         const phaseOffset = enemy.midbossStage === 3 ? 2 : (enemy.midbossStage === 2 ? 1 : 0);
-        const phase = (Math.floor(frameCount / 12) + phaseOffset) % phaseCount;
+        const phase = (Math.floor(frameCount / 10) + phaseOffset) % phaseCount;
 
         if (!enemy.midbossPatternStep) enemy.midbossPatternStep = 0;
         enemy.midbossPatternStep++;
 
-        const midbossSpeedScale = 0.85; // 中ボス弾速を現状から約15%低下
-        const midbossDensity = enemy.midbossStage === 3 ? 0.68 : (enemy.midbossStage === 2 ? 0.62 : 0.56);
+        const midbossSpeedScale = 1.00; // 小さい自機判定に合わせ、中ボス弾速を強化
+        const midbossDensity = enemy.midbossStage === 3 ? 0.92 : (enemy.midbossStage === 2 ? 0.86 : 0.78);
         if (enemy.midbossDensityAccumulator == null) enemy.midbossDensityAccumulator = 0;
         const shouldFireMidBullet = () => {
             enemy.midbossDensityAccumulator += midbossDensity;
@@ -887,7 +894,7 @@ function spawnEnemyBullets(enemy) {
     if (enemy.role === 'boss') {
         const bossPhaseCount = enemy.bossStage === 3 ? 15 : (enemy.bossStage === 2 ? 13 : 15);
         const bossPhaseOffset = enemy.bossPatternOffset || 0;
-        const phase=Math.floor(frameCount/42)%bossPhaseCount;
+        const phase=Math.floor(frameCount/36)%bossPhaseCount;
         const fTarget=(profile.row-1)*4+1, fRing=(profile.row-1)*4+2, fParticle=(profile.row-1)*4+3, fLine=(profile.row-1)*4+4;
         const bs=profile.speed;
         const add=(a,speed,frame=fParticle)=>enemyBullets.push({x:ex,y:ey,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,frame});
@@ -1320,23 +1327,33 @@ function update() {
     } else if (gameState === 'PLAYING') {
         frameCount++;
         
-        const touchMoveX=input.touch.moveX||0;
-        updateGravityState();
-        const zeroGravityCombat = zeroGravityActive;
-        let moveLeft = input.keys['a'] || input.keys['A'] || input.keys['ArrowLeft'] || input.touch.left || touchMoveX < -0.20;
-        let moveRight = input.keys['d'] || input.keys['D'] || input.keys['ArrowRight'] || input.touch.right || touchMoveX > 0.20;
-        let moveUp = input.keys['w'] || input.keys['W'] || input.keys['ArrowUp'];
-        let moveDown = input.keys['s'] || input.keys['S'] || input.keys['ArrowDown'];
+const touchMoveX=input.touch.moveX||0;
+const touchMoveY=input.touch.moveY||0; // 追加
+updateGravityState();
+const zeroGravityCombat = zeroGravityActive;
+let moveLeft = input.keys['a'] || input.keys['A'] || input.keys['ArrowLeft'] || input.touch.left || touchMoveX < -0.20;
+let moveRight = input.keys['d'] || input.keys['D'] || input.keys['ArrowRight'] || input.touch.right || touchMoveX > 0.20;
+let moveUp = input.keys['w'] || input.keys['W'] || input.keys['ArrowUp'] || input.touch.up || touchMoveY < -0.20; // タッチを追加
+let moveDown = input.keys['s'] || input.keys['S'] || input.keys['ArrowDown'] || input.touch.down || touchMoveY > 0.20; // タッチを追加
         let doJump = input.keys['w'] || input.keys['W'] || input.keys['ArrowUp'] || input.touch.jump;
         let currentSpeed = player.speed;
 
-        if (zeroGravityCombat) {
-            // ステージ1～3の中ボス・ボス戦は無重力。WASD / 方向キーで上下左右へ自由移動。
-            if (touchMoveX < -0.20){player.vx=touchMoveX*currentSpeed;player.dir=-1;}
-            else if (touchMoveX > 0.20){player.vx=touchMoveX*currentSpeed;player.dir=1;}
-            else if(moveLeft&&!moveRight){player.vx=-currentSpeed;player.dir=-1;}
-            else if(moveRight&&!moveLeft){player.vx=currentSpeed;player.dir=1;}
-            else {player.vx=0;}
+if (zeroGravityCombat) {
+    // X軸移動
+    if (touchMoveX < -0.20){player.vx=touchMoveX*currentSpeed;player.dir=-1;}
+    else if (touchMoveX > 0.20){player.vx=touchMoveX*currentSpeed;player.dir=1;}
+    else if(moveLeft&&!moveRight){player.vx=-currentSpeed;player.dir=-1;}
+    else if(moveRight&&!moveLeft){player.vx=currentSpeed;player.dir=1;}
+    else {player.vx=0;}
+
+    // Y軸移動（タッチの analogue 的な傾きにも対応）
+    if (Math.abs(touchMoveY) > 0.20) {
+        player.vy = touchMoveY * currentSpeed;
+    } else {
+        const verticalInput = (moveDown ? 1 : 0) - (moveUp ? 1 : 0);
+        player.vy = verticalInput * currentSpeed;
+    }
+    player.isJumping = false;
 
             const verticalInput = (moveDown ? 1 : 0) - (moveUp ? 1 : 0);
             player.vy = verticalInput * currentSpeed;
@@ -1370,10 +1387,56 @@ function update() {
                 player.vy = -player.jumpPower * 0.2;
             }
 
+// 1. まず X軸方向に移動させて衝突判定（横壁でピタッと止める）
             player.x += player.vx;
-            player.y += player.vy;
-            player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+            platforms.forEach(p => {
+                const platformRect = platformActiveRect(p);
+                const playerRect = getPlayerPlatformCollisionRect();
 
+                if (
+                    playerRect.x < platformRect.x + platformRect.w &&
+                    playerRect.x + playerRect.w > platformRect.x &&
+                    playerRect.y < platformRect.y + platformRect.h &&
+                    playerRect.y + playerRect.h > platformRect.y
+                ) {
+                    if (player.vx > 0) {
+                        // 右移動中：足場の左側に固定
+                        player.x = platformRect.x - (playerRect.x - player.x) - playerRect.w;
+                    } else if (player.vx < 0) {
+                        // 左移動中：足場の右側に固定
+                        player.x = platformRect.x + platformRect.w - (playerRect.x - player.x);
+                    }
+                    player.vx = 0;
+                }
+            });
+
+            // 2. 次に Y軸方向に移動させて衝突判定（床・天井）
+            player.y += player.vy;
+            platforms.forEach(p => {
+                const platformRect = platformActiveRect(p);
+                const playerRect = getPlayerPlatformCollisionRect();
+
+                if (
+                    playerRect.x < platformRect.x + platformRect.w &&
+                    playerRect.x + playerRect.w > platformRect.x &&
+                    playerRect.y < platformRect.y + platformRect.h &&
+                    playerRect.y + playerRect.h > platformRect.y
+                ) {
+                    if (player.vy > 0) {
+                        // 落下中：足場の上にすっぽり着地
+                        player.y = platformRect.y - (playerRect.y - player.y) - playerRect.h;
+                        player.vy = 0;
+                        player.isJumping = false;
+                    } else if (player.vy < 0) {
+                        // 上昇中：天井にヒット
+                        player.y = platformRect.y + platformRect.h - (playerRect.y - player.y);
+                        player.vy = 0;
+                    }
+                }
+            });
+
+            // 画面端判定
+            player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
             // 道路中央にある白い点線（背景画像の高さ64px中、y=56px付近）を地面の基準線にする。
             const groundLineY = canvas.height * (56 / 64);
             const groundY = groundLineY - player.h;
@@ -1404,14 +1467,6 @@ function update() {
                 if(tutorialJumpSeen&&!player.isJumping&&player.vy===0) tutorialJumpLanded=true;
                 if(tutorialJumpLanded){
                     tutorialStep=2;
-                    waveState='TUTORIAL_PLATFORM';
-                    tutorialStartX=player.x;
-                }
-            }else if(tutorialStep===2){
-                // 足場への着地判定は行わず、足場を使いながら前へ進む練習にする。
-                waveState='TUTORIAL_PLATFORM';
-                if(player.x>=tutorialStartX+Math.max(260,canvas.width*0.34)){
-                    tutorialStep=3;
                     tutorialAttackStarted=true;
                     waveState='TUTORIAL_ATTACK';
                     enemies=[];
@@ -1426,17 +1481,17 @@ function update() {
                         dummy.tutorialDummy=true;
                     }
                 }
-            }else if(tutorialStep===3){
+            }else if(tutorialStep===2){
                 waveState='TUTORIAL_ATTACK';
                 if(tutorialAttackStarted && enemies.length===0){
-                    tutorialStep=4;
+                    tutorialStep=3;
                     tutorialDodgeStartFrame=frameCount;
                     tutorialFinalEnemyStarted=false;
                     playerBullets=[];
                     enemyBullets=[];
                     waveState='TUTORIAL_DODGE';
                 }
-            }else if(tutorialStep===4){
+            }else if(tutorialStep===3){
                 waveState='TUTORIAL_DODGE';
                 if(frameCount % 54 === 0){
                     const ex=canvas.width*0.72;
@@ -1449,7 +1504,7 @@ function update() {
                     }
                 }
                 if(frameCount-tutorialDodgeStartFrame>=240){
-                    tutorialStep=5;
+                    tutorialStep=4;
                     playerBullets=[];
                     enemyBullets=[];
                     enemies=[];
@@ -1462,7 +1517,7 @@ function update() {
                     finalEnemy.targetX=Math.min(canvas.width-finalEnemy.w-80,canvas.width*0.60);
                     enemies.push(finalEnemy);
                 }
-            }else if(tutorialStep===5){
+            }else if(tutorialStep===4){
                 waveState='TUTORIAL_FINAL';
                 if(tutorialFinalEnemyStarted && enemies.length===0){
                     tutorialActive=false;
@@ -1509,14 +1564,16 @@ function update() {
 
             platforms.forEach(p => {
                 const platformRect = platformActiveRect(p);
-                const playerLeft = player.x;
-                const playerRight = player.x + player.w;
-                const playerTop = player.y;
-                const playerBottom = player.y + player.h;
-                const previousLeft = previousPlayerX;
-                const previousRight = previousPlayerX + player.w;
-                const previousTop = previousPlayerY;
-                const previousBottom = previousPlayerY + player.h;
+                const playerCollisionRect = getPlayerPlatformCollisionRect();
+                const previousCollisionRect = getPlayerPlatformCollisionRect(previousPlayerX, previousPlayerY);
+                const playerLeft = playerCollisionRect.x;
+                const playerRight = playerCollisionRect.x + playerCollisionRect.w;
+                const playerTop = playerCollisionRect.y;
+                const playerBottom = playerCollisionRect.y + playerCollisionRect.h;
+                const previousLeft = previousCollisionRect.x;
+                const previousRight = previousCollisionRect.x + previousCollisionRect.w;
+                const previousTop = previousCollisionRect.y;
+                const previousBottom = previousCollisionRect.y + previousCollisionRect.h;
 
                 const overlaps =
                     playerRight > platformRect.x &&
@@ -1662,16 +1719,6 @@ function update() {
             enemyBullets = [];
 
             if (tutorialActive) {
-                if(tutorialStep===6){
-                    tutorialActive=false;
-                    tutorialComplete=true;
-                    tutorialAttackStarted=false;
-                    tutorialFinalEnemyStarted=false;
-                    tutorialPlatformLandCount=0;
-                    tutorialWasOnAirPlatform=false;
-                    playerInvincibleUntil=0;
-                    startStage(1);
-                }
             } else if (stage === 1) {
                 switch (waveState) {
                     case 'STAGE1_ZAKO1':
@@ -1807,6 +1854,26 @@ function drawDebugOverlay() {
         ctx.lineWidth = 2;
         ctx.strokeRect(ex, ey, e.w, e.h);
     });
+
+    // 敵弾の被弾判定は弾の中心座標1点。デバッグ時は、その判定点を小さな枠で表示する。
+    enemyBullets.forEach(b => {
+        if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) return;
+        ctx.strokeStyle = '#ffcc00';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(b.x - 4, b.y - 4, 8, 8);
+        ctx.beginPath();
+        ctx.moveTo(b.x - 7, b.y);
+        ctx.lineTo(b.x + 7, b.y);
+        ctx.moveTo(b.x, b.y - 7);
+        ctx.lineTo(b.x, b.y + 7);
+        ctx.stroke();
+    });
+
+    // 足場との干渉判定（プレイヤー表示サイズの半分）。
+    const platformCollision = getPlayerPlatformCollisionRect();
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(platformCollision.x, platformCollision.y, platformCollision.w, platformCollision.h);
 
     ctx.restore();
 }
@@ -2162,17 +2229,15 @@ function draw() {
         ctx.font=`${Math.min(26,canvas.width*0.05)}px GameFont, sans-serif`;ctx.fillText('移動',joyX,joyY+8);ctx.fillText('JUMP',jumpX,jumpY+8);
         if(tutorialActive){
             const tutorialTitles=[
-                '1 / 6　移動',
-                '2 / 6　ジャンプ',
-                '3 / 6　足場を使って進む',
-                '4 / 6　自動攻撃',
-                '5 / 6　弾幕を避ける',
-                '6 / 6　実戦練習'
+                '1 / 5　移動',
+                '2 / 5　ジャンプ',
+                '3 / 5　自動攻撃',
+                '4 / 5　弾幕を避ける',
+                '5 / 5　実戦練習'
             ];
             const tutorialBodies=[
                 'PC：A / D または ← / →　　スマホ・iPad：左のスティック',
                 'PC：W / ↑　　スマホ・iPad：右の JUMP ボタン',
-                '足場を使いながら、落ち着いて右へ進もう',
                 '攻撃は自動です。敵の前まで進んで倒そう',
                 '弾は移動して避けます。4秒間、動き続けてみよう',
                 '最後の敵を倒せば基本操作チュートリアル完了！'
@@ -2180,7 +2245,6 @@ function draw() {
             const tutorialHints=[
                 '目的：右へ進んで次の説明へ',
                 '目的：ジャンプして着地する',
-                '目的：足場の上を活用しながら一定距離進む',
                 '目的：自動攻撃だけで敵を倒す',
                 '目的：4秒間、生き残る',
                 '目的：敵を倒してステージ1へ'
@@ -2198,7 +2262,7 @@ function draw() {
 
             const barX=panelX+28, barY=panelY+50, barW=panelW-56, barH=10;
             ctx.fillStyle='#333'; ctx.fillRect(barX,barY,barW,barH);
-            ctx.fillStyle='#dc8c39'; ctx.fillRect(barX,barY,barW*((tutorialStep+1)/6),barH);
+            ctx.fillStyle='#dc8c39'; ctx.fillRect(barX,barY,barW*((tutorialStep+1)/5),barH);
 
             ctx.fillStyle='#fff';
             ctx.font=`${Math.min(20,canvas.width*0.032)}px GameFont, sans-serif`;
@@ -2211,9 +2275,8 @@ function draw() {
             ctx.font=`${Math.min(16,canvas.width*0.026)}px GameFont, sans-serif`;
             if(tutorialStep===0) ctx.fillText('右へ移動すると自動で次へ進みます',canvas.width/2,panelY+158);
             else if(tutorialStep===1) ctx.fillText('ジャンプして着地するまで次へ進みません',canvas.width/2,panelY+158);
-            else if(tutorialStep===2) ctx.fillText('足場を使いながら右へ進もう',canvas.width/2,panelY+158);
-            else if(tutorialStep===3) ctx.fillText('敵を倒すまで操作を続けよう',canvas.width/2,panelY+158);
-            else if(tutorialStep===4) ctx.fillText(`練習時間：${Math.min(4,Math.floor((frameCount-tutorialDodgeStartFrame)/60))} / 4 秒`,canvas.width/2,panelY+158);
+            else if(tutorialStep===2) ctx.fillText('敵を倒すまで操作を続けよう',canvas.width/2,panelY+158);
+            else if(tutorialStep===3) ctx.fillText(`練習時間：${Math.min(4,Math.floor((frameCount-tutorialDodgeStartFrame)/60))} / 4 秒`,canvas.width/2,panelY+158);
             else ctx.fillText('ここまでできたら、いよいよ本番です',canvas.width/2,panelY+158);
 
             ctx.fillStyle='#aaa';
@@ -2276,7 +2339,7 @@ const PLAYER_HITBOX_SOURCE_WIDTH = 11;
 const PLAYER_HITBOX_SOURCE_HEIGHT = 11;
 const PLAYER_HITBOX_SOURCE_CENTER_X = 32;
 const PLAYER_HITBOX_SOURCE_CENTER_Y = 31.5;
-const PLAYER_HITBOX_MARKER_SIZE = 44;
+const PLAYER_HITBOX_MARKER_SIZE = 44 * 1.1;
 const PLAYER_HITBOX_CENTER_X = 0.50;
 const PLAYER_HITBOX_CENTER_Y = 0.60;
 
@@ -2298,6 +2361,20 @@ const PLATFORM_VISIBLE_SOURCE_X = 9;
 const PLATFORM_VISIBLE_SOURCE_Y = 24;
 const PLATFORM_VISIBLE_SOURCE_W = 40;
 const PLATFORM_VISIBLE_SOURCE_H = 15;
+
+// 足場との干渉判定は、現在の判定サイズを1.2倍に拡大し、プレイヤー表示サイズ(90x120)の60%(54x72)を使用する。
+// 被弾用のplayer_hitboxとは別判定。中心はプレイヤー本体の中央。
+const PLAYER_PLATFORM_COLLISION_W = player.w * 0.6 + 4;
+const PLAYER_PLATFORM_COLLISION_H = player.h * 0.6 + 8;
+
+function getPlayerPlatformCollisionRect(x = player.x, y = player.y) {
+    return {
+        x: x + (player.w - PLAYER_PLATFORM_COLLISION_W) / 2,
+        y: y + (player.h - PLAYER_PLATFORM_COLLISION_H) / 2,
+        w: PLAYER_PLATFORM_COLLISION_W,
+        h: PLAYER_PLATFORM_COLLISION_H
+    };
+}
 
 function platformActiveRect(p) {
     return {
