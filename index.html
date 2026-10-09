@@ -105,6 +105,13 @@ function getHowToBackButtonRect() {
     const bw = Math.min(300, canvas.width * 0.62), bh = Math.min(58, canvas.height * 0.085);
     return { bx:(canvas.width-bw)/2, by:canvas.height*0.84, bw, bh };
 }
+function getCreditsButtonRect() {
+    const hr = getHowToButtonRect();
+    return { bx: hr.bx, by: hr.by + hr.bh + 12, bw: hr.bw, bh: hr.bh };
+}
+function getCreditsBackButtonRect() {
+    return getHowToBackButtonRect();
+}
 function getChoiceRects() {
     const bw = Math.min(380, canvas.width * 0.78), bh = Math.min(68, canvas.height * 0.11);
     const bx = (canvas.width - bw) / 2;
@@ -123,11 +130,14 @@ function isPointInRect(x,y,r){return x>=r.bx&&x<=r.bx+r.bw&&y>=r.by&&y<=r.by+r.b
 canvas.addEventListener('click', e => {
     const r = canvas.getBoundingClientRect();
     const x = e.clientX-r.left, y=e.clientY-r.top;
-    if(gameState==='TITLE'&&isTitleAnimFinished){
+if(gameState==='TITLE'&&isTitleAnimFinished){
         if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
         else if(isPointInRect(x,y,getHowToButtonRect())) setGameState('HOW_TO_PLAY');
+        else if(isPointInRect(x,y,getCreditsButtonRect())) setGameState('CREDITS');
     }else if(gameState==='HOW_TO_PLAY'){
         if(isPointInRect(x,y,getHowToBackButtonRect())) setGameState('TITLE');
+    }else if(gameState==='CREDITS'){
+        if(isPointInRect(x,y,getCreditsBackButtonRect())) setGameState('TITLE');
     }else if(gameState==='TUTORIAL_CHOICE'){
         const rs=getChoiceRects();
         if(isPointInRect(x,y,rs[0])) beginTutorial();
@@ -152,13 +162,18 @@ function handleTouch(e){
     const jumpR=Math.min(58,Math.max(44,canvas.width*0.065));
     for(let i=0;i<e.touches.length;i++){
         const t=e.touches[i],x=t.clientX-rect.left,y=t.clientY-rect.top;
-        if(gameState==='TITLE'&&isTitleAnimFinished){
+       if(gameState==='TITLE'&&isTitleAnimFinished){
             if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
             else if(isPointInRect(x,y,getHowToButtonRect())) setGameState('HOW_TO_PLAY');
+            else if(isPointInRect(x,y,getCreditsButtonRect())) setGameState('CREDITS');
             continue;
         }
         if(gameState==='HOW_TO_PLAY'){
             if(isPointInRect(x,y,getHowToBackButtonRect())) setGameState('TITLE');
+            continue;
+        }
+        if(gameState==='CREDITS'){
+            if(isPointInRect(x,y,getCreditsBackButtonRect())) setGameState('TITLE');
             continue;
         }
         if(gameState==='TUTORIAL_CHOICE'){
@@ -286,6 +301,7 @@ let stage = 1;
 let frameCount = 0;
 const MAX_PLAYER_HP = 25;
 let hitCount = 0;
+let totalHitCount = 0;
 let playerInvincibleUntil = 0;
 let gameStartTime = 0;
 let clearTimeMs = 0;
@@ -1313,10 +1329,10 @@ function update() {
                     }
                 }
             }
-        } else if (input.justPressed['Enter'] || input.justPressed[' '] || input.touch.jump) {
+       } else if (input.justPressed['Enter'] || input.justPressed[' '] || input.touch.jump) {
             setGameState('TUTORIAL_CHOICE');
         }
-    } else if (gameState === 'HOW_TO_PLAY') {
+    } else if (gameState === 'HOW_TO_PLAY' || gameState === 'CREDITS') {
         if (input.justPressed['Escape'] || input.justPressed['Backspace'] || input.justPressed['Enter'] || input.justPressed[' ']) {
             setGameState('TITLE');
         }
@@ -1796,6 +1812,7 @@ if (zeroGravityCombat) {
                 b.y < playerHitbox.y + playerHitbox.h;
             if (!debugMode && overlaps && performance.now() >= playerInvincibleUntil) {
                 hitCount++;
+                totalHitCount++;
                 playerInvincibleUntil = performance.now() + 1000;
                 screenShakeTimer = 12;
                 screenShakeMagnitude = 10;
@@ -2004,8 +2021,14 @@ function draw() {
             ctx.fillStyle = '#ffffff'; ctx.fillRect(hr.bx, hr.by, hr.bw, hr.bh);
             ctx.fillStyle = '#000000'; ctx.font = `${Math.min(24, hr.bh * 0.44)}px GameFont, sans-serif`;
             ctx.fillText('遊び方', canvas.width / 2, hr.by + hr.bh * 0.65);
+
+            const cr = getCreditsButtonRect();
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(cr.bx, cr.by, cr.bw, cr.bh);
+            ctx.fillStyle = '#000000'; ctx.font = `${Math.min(24, cr.bh * 0.44)}px GameFont, sans-serif`;
+            ctx.fillText('クレジット', canvas.width / 2, cr.by + cr.bh * 0.65);
+
             ctx.font = `${Math.min(15, canvas.height * 0.024)}px GameFont, sans-serif`; ctx.fillStyle = '#000';
-            ctx.fillText('Enter / クリックでSTART・「遊び方」で説明を見る', canvas.width / 2, Math.min(canvas.height - 10, hr.by + hr.bh + 24));
+            ctx.fillText('Enter / クリックでSTART・「遊び方」「クレジット」で詳細表示', canvas.width / 2, Math.min(canvas.height - 10, cr.by + cr.bh + 20));
             ctx.restore();
         }
 
@@ -2063,6 +2086,55 @@ function draw() {
         ctx.fillText(`被弾できる回数は ${MAX_PLAYER_HP} 回です。上限に達するとゲームオーバーです。`,left,y);
 
         const br=getHowToBackButtonRect();
+        ctx.fillStyle='#dc8c39';
+        ctx.fillRect(br.bx,br.by,br.bw,br.bh);
+        ctx.textAlign='center';
+        ctx.fillStyle='#000';
+        ctx.font=`${Math.min(24,br.bh*0.44)}px GameFont, sans-serif`;
+        ctx.fillText('戻る',canvas.width/2,br.by+br.bh*0.65);
+        ctx.fillStyle='#fff';
+ctx.font=`${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
+        ctx.fillText('Enter / Space / Escape / クリックで戻る',canvas.width/2,Math.min(canvas.height-8,br.by+br.bh+22));
+        ctx.restore();
+    } else if (gameState === 'CREDITS') {
+        ctx.fillStyle='#000';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.save();
+        ctx.globalAlpha = easeOutCubic(uiFadeProgress);
+        ctx.textAlign='center';
+
+        const isSmall = canvas.height < 700 || canvas.width < 700;
+        const titleY = isSmall ? canvas.height*0.09 : canvas.height*0.08;
+        ctx.fillStyle='#dc8c39';
+        ctx.font=`${Math.min(42,canvas.width*0.07)}px GameFont, sans-serif`;
+        ctx.fillText('CREDITS',canvas.width/2,titleY);
+
+        const left = Math.max(22, canvas.width*0.07);
+        const lineGap = isSmall ? 25 : 29;
+        let y = isSmall ? canvas.height*0.16 : canvas.height*0.15;
+
+        const creditsData = [
+            { category: '【 ディレクター / 企画 】', members: '[ Yuta.N, Sota.K, Taichi.K ]' },
+            { category: '【 グラフィックデザイン / ドット絵 】', members: '[ Sota.K, Yuta.N ]' },
+            { category: '【 プログラミング 】', members: '[ Yuta.N, Taichi.K ]' },
+            { category: '【 テストプレイヤー / デバッグ 】', members: '[ Haruki.T, Taichi.K, Sotaro.M ]' },
+            { category: '【 スペシャルサンクス 】', members: '[ Mr.Yamashita, Yusei.Y, And you! ]' }
+        ];
+
+        ctx.textAlign='left';
+        creditsData.forEach(item => {
+            ctx.fillStyle='#dc8c39';
+            ctx.font=`${Math.min(21,canvas.width*0.035)}px GameFont, sans-serif`;
+            ctx.fillText(item.category, left, y); 
+            y += lineGap;
+
+            ctx.fillStyle='#fff';
+            ctx.font=`${Math.min(18,canvas.width*0.03)}px GameFont, sans-serif`;
+            ctx.fillText(item.members, left + 15, y); 
+            y += lineGap * 1.2;
+        });
+
+        const br = getCreditsBackButtonRect();
         ctx.fillStyle='#dc8c39';
         ctx.fillRect(br.bx,br.by,br.bw,br.bh);
         ctx.textAlign='center';
@@ -2395,11 +2467,11 @@ drawGravityTransitionEffect();
             ctx.fillStyle = '#fff';
             ctx.font = `${Math.min(18, canvas.width * 0.032)}px GameFont, sans-serif`;
             ctx.fillText('Enter / クリックでリスタート', canvas.width/2, restartRect.by + restartRect.bh + 30);
-        } else {
+} else {
             ctx.fillText('CLEAR', canvas.width/2, canvas.height/2 - 60);
             ctx.font = '26px GameFont, sans-serif';
             ctx.fillText(`TIME  ${Math.floor(clearTimeMs / 60000)}:${String(Math.floor(clearTimeMs / 1000) % 60).padStart(2,'0')}`, canvas.width/2, canvas.height/2);
-            ctx.fillText(`被弾数  ${hitCount}`, canvas.width/2, canvas.height/2 + 48);
+            ctx.fillText(`被弾数  ${totalHitCount}`, canvas.width/2, canvas.height/2 + 48); 
         }
         ctx.restore();
     }
@@ -2563,7 +2635,7 @@ function setupPlatforms() {
 }
 
 function resetRun() {
-    hitCount = 0; playerInvincibleUntil = 0; frameCount = 0; gameStartTime = performance.now(); clearTimeMs = 0;
+    hitCount = 0; totalHitCount = 0; playerInvincibleUntil = 0; frameCount = 0; gameStartTime = performance.now(); clearTimeMs = 0;
     zeroGravityActive = false;
     gravityTransitionTimer = 0;
     gravityTransitionDirection = 0;
