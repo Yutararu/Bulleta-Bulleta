@@ -131,8 +131,10 @@ canvas.addEventListener('click', e => {
     const r = canvas.getBoundingClientRect();
     const x = e.clientX-r.left, y=e.clientY-r.top;
     
-    if (gameState === 'INIT') {
-        // 最初のクリックでBGM(タイトル曲)を起動し、タイトル画面へ移行
+if (gameState === 'INIT') {
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
         playBGM('title');
         setGameState('TITLE');
         return;
@@ -171,7 +173,10 @@ function handleTouch(e){
    for(let i=0;i<e.touches.length;i++){
         const t=e.touches[i],x=t.clientX-rect.left,y=t.clientY-rect.top;
 
-        if (gameState === 'INIT') {
+if (gameState === 'INIT') {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
             playBGM('title');
             setGameState('TITLE');
             continue;
@@ -234,7 +239,6 @@ const bgmTracks = {
     stage3: new Audio('Existential_Depth.mp3')
 };
 
-const hitSE = new Audio('Hit.mp3');
 
 // 音量とループの一括設定
 Object.values(bgmTracks).forEach(audio => {
@@ -261,12 +265,36 @@ function playBGM(key) {
     }
 }
 
-// 被弾音(SE)再生関数
+// Web Audio API の初期化
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let hitBuffer = null;
+
+// Hit.mp3 をメモリに前もってロード（遅延ゼロ化）
+fetch('Hit.mp3')
+    .then(response => response.arrayBuffer())
+    .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
+    .then(decodedData => { hitBuffer = decodedData; })
+    .catch(e => console.log('SE Load Error:', e));
+
+// 超高速・遅延ゼロのSE再生関数
 function playHitSE() {
-    // soundを複製して毎回新しく鳴らすことで、連続再生や読み込みブロックを回避
-    const se = hitSE.cloneNode();
-    se.volume = hitSE.volume;
-    se.play().catch(e => console.log('SE Play Blocked:', e));
+    if (!hitBuffer) return;
+    
+    // サスペンド状態（ブラウザの自動再生規制）を解除
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+
+    const source = audioCtx.createBufferSource();
+    const gainNode = audioCtx.createGain();
+
+    source.buffer = hitBuffer;
+    gainNode.gain.value = 1.0; // SEの音量（0.0 〜 1.0以上も可）
+
+    source.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    source.start(0); // 呼び出した瞬間に即時再生
 }
 
 // === 画像ロード ===
