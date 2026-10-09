@@ -130,7 +130,15 @@ function isPointInRect(x,y,r){return x>=r.bx&&x<=r.bx+r.bw&&y>=r.by&&y<=r.by+r.b
 canvas.addEventListener('click', e => {
     const r = canvas.getBoundingClientRect();
     const x = e.clientX-r.left, y=e.clientY-r.top;
-if(gameState==='TITLE'&&isTitleAnimFinished){
+    
+    if (gameState === 'INIT') {
+        // 最初のクリックでBGM(タイトル曲)を起動し、タイトル画面へ移行
+        playBGM('title');
+        setGameState('TITLE');
+        return;
+    }
+
+    if(gameState==='TITLE'&&isTitleAnimFinished){
         if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
         else if(isPointInRect(x,y,getHowToButtonRect())) setGameState('HOW_TO_PLAY');
         else if(isPointInRect(x,y,getCreditsButtonRect())) setGameState('CREDITS');
@@ -160,9 +168,16 @@ function handleTouch(e){
     const joyR=Math.min(70,Math.max(48,canvas.width*0.075));
     const jumpX=canvas.width-Math.min(88,canvas.width*0.13),jumpY=canvas.height-92;
     const jumpR=Math.min(58,Math.max(44,canvas.width*0.065));
-    for(let i=0;i<e.touches.length;i++){
+   for(let i=0;i<e.touches.length;i++){
         const t=e.touches[i],x=t.clientX-rect.left,y=t.clientY-rect.top;
-       if(gameState==='TITLE'&&isTitleAnimFinished){
+
+        if (gameState === 'INIT') {
+            playBGM('title');
+            setGameState('TITLE');
+            continue;
+        }
+
+        if(gameState==='TITLE'&&isTitleAnimFinished){
             if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
             else if(isPointInRect(x,y,getHowToButtonRect())) setGameState('HOW_TO_PLAY');
             else if(isPointInRect(x,y,getCreditsButtonRect())) setGameState('CREDITS');
@@ -211,6 +226,49 @@ function handleTouch(e){
         }
     }
 }
+
+// === 音声（BGM & SE）ロードと管理 ===
+const bgmTracks = {
+    title: new Audio('Time_Travel.mp3'),
+    stage1_2: new Audio('Deckrail.mp3'),
+    stage3: new Audio('Existential_Depth.mp3')
+};
+
+const hitSE = new Audio('Hit.mp3');
+
+// 音量とループの一括設定
+Object.values(bgmTracks).forEach(audio => {
+    audio.loop = true;
+    audio.volume = 0.25; // BGMの音量（控えめ設定）
+});
+hitSE.volume = 0.95;    // SEの音量（大きめ設定）
+
+let currentBGMKey = null;
+
+// BGM再生関数
+function playBGM(key) {
+    if (currentBGMKey === key) return; // すでに同じ曲が流れていればスキップ
+    
+    // 現在再生中のBGMがあれば停止
+    if (currentBGMKey && bgmTracks[currentBGMKey]) {
+        bgmTracks[currentBGMKey].pause();
+        bgmTracks[currentBGMKey].currentTime = 0;
+    }
+    
+    currentBGMKey = key;
+    if (bgmTracks[key]) {
+        bgmTracks[key].play().catch(e => console.log('BGM Play Blocked:', e));
+    }
+}
+
+// 被弾音(SE)再生関数
+function playHitSE() {
+    // soundを複製して毎回新しく鳴らすことで、連続再生や読み込みブロックを回避
+    const se = hitSE.cloneNode();
+    se.volume = hitSE.volume;
+    se.play().catch(e => console.log('SE Play Blocked:', e));
+}
+
 // === 画像ロード ===
 const images = {};
 const logoImage = new Image();
@@ -296,7 +354,7 @@ function drawSpriteFitScreen(img, cols, rows, index) {
 }
 
 // === ゲーム状態 ===
-let gameState = 'TITLE';
+let gameState = 'INIT';
 let stage = 1;
 let frameCount = 0;
 const MAX_PLAYER_HP = 25;
@@ -404,8 +462,12 @@ function setGameState(nextState) {
     transitionPhase = 'out';
     transitionAlpha = 0;
     uiFadeProgress = 0;
-}
 
+    // ★ この3行を追加して置き換えます
+    if (nextState === 'TITLE') {
+        playBGM('title'); // タイトル画面に戻った時に Time_Travel.mp3 を再生
+    }
+}
 function updateTransition() {
     if (transitionActive) {
         if (transitionPhase === 'out') {
@@ -439,13 +501,20 @@ function easeOutCubic(t) {
 function startStage(stg) {
     stage = stg;
     platforms.forEach(p => p.type = stage);
-    // ステージ開始時はプレイヤーのHPを全回復する。
+    // ステージ開始時はプレイヤーのHPを全回復する（通算被弾数は保持）
     hitCount = 0;
     enemies = [];
     playerBullets = [];
     enemyBullets = [];
     stageStartFrame = frameCount;
     stage1PhaseIndex = 0;
+
+    // ★ ここにBGM切り替え処理を追加
+    if (stage === 1 || stage === 2) {
+        playBGM('stage1_2'); // Deckrail.mp3
+    } else if (stage === 3) {
+        playBGM('stage3');   // Existential_Depth.mp3
+    }
 
     if (stage === 1) {
         spawnStage1Zako1();
@@ -455,7 +524,6 @@ function startStage(stg) {
         spawnStage3Zako1();
     }
 }
-
 function safeEnemyY(requestedY, enemyH) {
     const top = 18;
     const bottom = Math.max(top, canvas.height - enemyH - 105);
@@ -1286,6 +1354,22 @@ function update() {
     updateTransition();
     if (transitionActive) return;
 
+    if (gameState === 'INIT') {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // 白文字でドクドクと点滅（透明度のみ変化）
+        const alpha = 0.5 + Math.sin(Date.now() * 0.005) * 0.5;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#ffffff'; // 白色指定
+        ctx.font = `${Math.min(36, canvas.width * 0.06)}px GameFont, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('Click to Start', canvas.width / 2, canvas.height / 2); 
+        ctx.restore();
+        return;
+    }
+
     if (gameState === 'TITLE') {
         if (introPhase !== 'TITLE_ANIM') {
             // ロゴ用イントロはタイトルアニメーションより前に独立して進める。
@@ -1810,9 +1894,10 @@ if (zeroGravityCombat) {
                 b.x < playerHitbox.x + playerHitbox.w &&
                 b.y > playerHitbox.y &&
                 b.y < playerHitbox.y + playerHitbox.h;
-            if (!debugMode && overlaps && performance.now() >= playerInvincibleUntil) {
+           if (!debugMode && overlaps && performance.now() >= playerInvincibleUntil) {
                 hitCount++;
                 totalHitCount++;
+                playHitSE(); // ★ 被弾音(Hit.mp3)を鳴らす
                 playerInvincibleUntil = performance.now() + 1000;
                 screenShakeTimer = 12;
                 screenShakeMagnitude = 10;
