@@ -84,6 +84,12 @@ window.addEventListener('keydown', e => {
         e.preventDefault();
         return;
     }
+    // ステージ1, 2, 3のプレイ中にEscキーを押した時、一時停止を切り替え
+    if (e.key === 'Escape' && gameState === 'PLAYING' && [1, 2, 3].includes(stage)) {
+        isPaused = !isPaused;
+        e.preventDefault();
+        return;
+    }
     if (!input.keys[e.key]) input.justPressed[e.key] = true;
     input.keys[e.key] = true;
     if (['Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', ' '].includes(e.key)) e.preventDefault();
@@ -125,15 +131,36 @@ function getGameOverRestartButtonRect() {
     const bw = Math.min(360, canvas.width * 0.66), bh = Math.min(68, canvas.height * 0.10);
     return {bx:(canvas.width-bw)/2, by:canvas.height*0.61, bw, bh};
 }
+// 右上の一時停止ボタンの領域を取得 (幅50px, 高さ50px, 画面右上に配置)
+function getMenuButtonRect() {
+    const bw = 80, bh = 80;
+    return { bx: canvas.width - bw - 15, by: 15, bw, bh };
+}
 function isPointInRect(x,y,r){return x>=r.bx&&x<=r.bx+r.bw&&y>=r.by&&y<=r.by+r.bh;}
 
 canvas.addEventListener('click', e => {
     const r = canvas.getBoundingClientRect();
     const x = e.clientX-r.left, y=e.clientY-r.top;
+
+    // ステージ1〜3のプレイ中に右上のStart_Stopボタンが押された場合
+    if (gameState === 'PLAYING' && [1, 2, 3].includes(stage) && isPointInRect(x, y, getMenuButtonRect())) {
+        isPaused = !isPaused;
+        return;
+    }
+    // メニューが開いている時に画面中央（メニュー内）を押したらポーズ解除
+    if (gameState === 'PLAYING' && isPaused) {
+        const mw = Math.min(400, canvas.width * 0.8), mh = Math.min(300, canvas.height * 0.6);
+        const menuRect = { bx: (canvas.width - mw) / 2, by: (canvas.height - mh) / 2, bw: mw, bh: mh };
+        if (isPointInRect(x, y, menuRect)) {
+            isPaused = false;
+            return;
+        }
+    }
     
-    if (gameState === 'INIT') {
-        // 最初のクリックでBGM(タイトル曲)を起動し、タイトル画面へ移行
-        playBGM('title');
+if (gameState === 'INIT') {
+        if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
         setGameState('TITLE');
         return;
     }
@@ -171,12 +198,13 @@ function handleTouch(e){
    for(let i=0;i<e.touches.length;i++){
         const t=e.touches[i],x=t.clientX-rect.left,y=t.clientY-rect.top;
 
-        if (gameState === 'INIT') {
-            playBGM('title');
+if (gameState === 'INIT') {
+            if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
             setGameState('TITLE');
             continue;
         }
-
         if(gameState==='TITLE'&&isTitleAnimFinished){
             if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
             else if(isPointInRect(x,y,getHowToButtonRect())) setGameState('HOW_TO_PLAY');
@@ -270,6 +298,8 @@ const imageSources = {
     bullets: 'bullets.png',
     platforms: 'platforms.png',
     hpBar: 'HP_Bar.png',
+    menuBtn: 'Start_Stop.png',
+    menuPopup: 'Menu.png',
     enemy1: 'enemy1.png',
     enemy2: 'enemy2.png',
     enemy3: 'enemy3.png',
@@ -282,7 +312,6 @@ const imageSources = {
     enemy10: 'enemy10.png',
     enemy11: 'enemy11.png'
 };
-
 let imagesLoaded = 0;
 const totalImages = Object.keys(imageSources).length;
 for (let key in imageSources) {
@@ -344,6 +373,7 @@ function drawSpriteFitScreen(img, cols, rows, index) {
 // === ゲーム状態 ===
 let gameState = 'INIT';
 let stage = 1;
+let isPaused = false;
 let frameCount = 0;
 const MAX_PLAYER_HP = 25;
 let hitCount = 0;
@@ -451,10 +481,6 @@ function setGameState(nextState) {
     transitionAlpha = 0;
     uiFadeProgress = 0;
 
-    // ★ この3行を追加して置き換えます
-    if (nextState === 'TITLE') {
-        playBGM('title'); // タイトル画面に戻った時に Time_Travel.mp3 を再生
-    }
 }
 function updateTransition() {
     if (transitionActive) {
@@ -1378,10 +1404,11 @@ function update() {
                     introPhase = 'BLACK_GAP';
                     introLogoTimer = 0;
                 }
-            } else if (introPhase === 'BLACK_GAP') {
+} else if (introPhase === 'BLACK_GAP') {
                 introLogoTimer++;
                 if (introLogoTimer >= INTRO_BLACK_GAP_FRAMES) {
                     introPhase = 'TITLE_ANIM';
+                    playBGM('title'); // ★ タイトルアニメーション開始時にBGMを再生
                     titleAnimFrame = 1;
                     titleAnimTimer = 0;
                 }
@@ -1416,7 +1443,10 @@ function update() {
         if (input.justPressed['Enter'] || input.justPressed[' ']) proceedToNextStage();
     } else if (gameState === 'GAMEOVER') {
         if (hitCount >= MAX_PLAYER_HP && (input.justPressed['Enter'] || input.justPressed[' '])) restartGame();
-    } else if (gameState === 'PLAYING') {
+} else if (gameState === 'PLAYING') {
+        // ポーズ中はゲーム内フレームを進めず処理をスキップ
+        if (isPaused) return;
+
         frameCount++;
         
 const touchMoveX=input.touch.moveX||0;
@@ -2489,12 +2519,52 @@ ctx.font=`${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
             ctx.fillText('チュートリアル中は被弾しません　／　スキップ不可',canvas.width/2,panelY+184);
         }
 
-        ctx.save();
+ctx.save();
         ctx.textAlign = 'right';
         ctx.fillStyle = 'rgba(255,255,255,0.65)';
         ctx.font = '14px GameFont, sans-serif';
         ctx.fillText(GAME_VERSION, canvas.width - 14, 24);
         ctx.restore();
+
+        // --- ステージ1,2,3の時のみ右上に Start_Stop ボタンを描画 ---
+        if ([1, 2, 3].includes(stage)) {
+            const btnR = getMenuButtonRect();
+            const btnImg = images.menuBtn;
+            if (btnImg && btnImg.complete && btnImg.naturalWidth > 0) {
+                // 通常時(1コマ目:再生/一時停止アイコン) と ポーズ時(2コマ目) で表示を切替
+                const btnFrame = isPaused ? 1 : 2; 
+                drawSprite(btnImg, 1, 2, btnFrame, btnR.bx, btnR.by, btnR.bw, btnR.bh);
+            }
+        }
+
+        // --- ポーズ中の Menu ポップアップ表示 ---
+        if (isPaused) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; // 背景を暗くする
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const popupImg = images.menuPopup;
+            const mw = Math.min(400, canvas.width * 0.8);
+            const mh = Math.min(300, canvas.height * 0.6);
+            const mx = (canvas.width - mw) / 2;
+            const my = (canvas.height - mh) / 2;
+
+            if (popupImg && popupImg.complete && popupImg.naturalWidth > 0) {
+                ctx.drawImage(popupImg, mx, my, mw, mh);
+            } else {
+                ctx.fillStyle = '#333';
+                ctx.fillRect(mx, my, mw, mh);
+            }
+
+            // MENU文字の表示
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '36px GameFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('PAUSE', canvas.width / 2, my + mh * 0.4);
+            ctx.font = '18px GameFont, sans-serif';
+            ctx.fillText('タップまたはクリックで再開', canvas.width / 2, my + mh * 0.7);
+            ctx.restore();
+        }
 
 drawGravityTransitionEffect();
         drawStageTransitionEffect();
